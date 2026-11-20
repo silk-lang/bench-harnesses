@@ -1,0 +1,9 @@
+[package]
+name = "silk-bench-harness"
+version = "0.1.0"
+edition = "2021"
+description = "A harness for Rust benchmarks that a Silk benchmark task drives"
+publish = false
+
+[lib]
+name = "silk_bench_harness"

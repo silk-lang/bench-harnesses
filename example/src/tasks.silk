@@ -1,0 +1,59 @@
+//! `silk task bench` compares the four harnesses. Run `make` in the repository first: it
+//! builds the C, Rust and Go programs into `bin/`.
+
+import silk.bench.bench { Bench, BenchError, BenchOptions }
+import silk.bench.suite { Implementation, Suite }
+import silk.build.graph { Compilation, Options }
+import silk.build.step { Deferred }
+import silk.cli.command { Command, CommandLine }
+import silk.cli.task { Task, TaskSet }
+import silk.mem.allocator { Allocator }
+import silk.system.child_process { ChildProcess }
+import silk.system.filesystem { FileSystem, Path }
+import silk.system.host_input { HostInput }
+
+union Tasks {
+  Bench { pub options: Options, pub bench: BenchOptions },
+}
+
+impl CommandLine for Tasks {
+  static fn command() -> Command<Tasks> {
+    return Command<Tasks>.make("tasks", "This project's tasks")
+      |> Command.variant("Bench", "Compare the Silk, C, Rust and Go harnesses")
+      |> Command.flatten("options")
+      |> Command.flatten("bench")
+  }
+}
+
+impl TaskSet for Tasks {
+  effect fn perform(self: Tasks) -> ()
+    ! BenchError
+    ? &mut HostInput | &mut Allocator | &mut ChildProcess | &mut FileSystem {
+    match move self {
+      Tasks.Bench { options, bench } => {
+        let compilation = run Compilation.fromPackage(&options)
+        let mut silk = Implementation.program(run compilation.artifact())
+        silk.driven()
+        let mut c = Implementation.program(run Deferred<Path>.source("bin/c"))
+        c.driven()
+        let mut rust = Implementation.program(run Deferred<Path>.source("bin/rust"))
+        rust.driven()
+        let mut go = Implementation.program(run Deferred<Path>.source("bin/go"))
+        go.driven()
+
+        let mut suite = run Suite.command("hash")
+        run suite.implementation("silk", move silk)
+        run suite.implementation("c", move c)
+        run suite.implementation("rust", move rust)
+        run suite.implementation("go", move go)
+        run suite.reference("c")
+        run Bench.perform(&bench, &[move suite])
+      }
+    }
+  }
+}
+
+pub effect fn main() -> i32
+  ? &mut HostInput {
+  return run Task.main<Tasks>()
+}
